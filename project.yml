@@ -1,0 +1,35 @@
+name: PhotoCleaner
+options:
+  bundleIdPrefix: com.victorlamache
+  deploymentTarget:
+    iOS: "16.0"
+
+targets:
+  PhotoCleaner:
+    type: application
+    platform: iOS
+    sources:
+      - PhotoCleaner
+    info:
+      path: PhotoCleaner/Info.plist
+      properties:
+        CFBundleDisplayName: "PhotoCleaner"
+        CFBundleName: "PhotoCleaner"
+        UILaunchScreen: {}
+        NSPhotoLibraryUsageDescription: "PhotoCleaner a besoin d'accéder à vos photos pour vous permettre de trier et nettoyer votre galerie."
+        NSPhotoLibraryAddUsageDescription: "PhotoCleaner a besoin de la permission de gérer les suppressions dans votre galerie."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.victorlamache.contactdev
+        DEVELOPMENT_TEAM: A63WD37CXZ
+        CODE_SIGN_STYLE: Manual
+        PROVISIONING_PROFILE_SPECIFIER: "Victor Lamache Dev"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        SWIFT_VERSION: "5.9"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - sdk: Photos.framework
+      - sdk: PhotosUI.framework
