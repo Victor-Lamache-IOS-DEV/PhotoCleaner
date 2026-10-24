@@ -22,7 +22,7 @@ targets:
           - UIInterfaceOrientationPortrait
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.victorlamache.contactdev
+        PRODUCT_BUNDLE_IDENTIFIER: com.victorlamache.photocleanerdev
         DEVELOPMENT_TEAM: A63WD37CXZ
         CODE_SIGN_STYLE: Manual
         PROVISIONING_PROFILE_SPECIFIER: "Victor Lamache Dev"

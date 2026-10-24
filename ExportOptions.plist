@@ -10,7 +10,7 @@
     <string>manual</string>
     <key>provisioningProfiles</key>
     <dict>
-        <key>com.victorlamache.contactdev</key>
+        <key>com.victorlamache.photocleanerdev</key>
         <string>Victor Lamache Dev</string>
     </dict>
     <key>compileBitcode</key>
