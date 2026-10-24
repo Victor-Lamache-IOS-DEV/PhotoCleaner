@@ -143,7 +143,7 @@ public struct ContentView: View {
                 allDoneView
             } else {
                 ZStack {
-                    ForEach(Array(photoService.activeCards.prefix(3).enumerated().reversed()), id: \.element.id) { index, card in
+                    ForEach(Array(photoService.activeCards.prefix(2).enumerated().reversed()), id: \.element.id) { index, card in
                         let isTop = (index == 0)
                         CardView(
                             card: card,
@@ -152,8 +152,6 @@ public struct ContentView: View {
                                 photoService.swipeCurrentCard(decision: decision)
                             }
                         )
-                        .scaleEffect(1.0 - (CGFloat(index) * 0.045))
-                        .offset(y: CGFloat(index) * 12)
                         .zIndex(Double(photoService.activeCards.count - index))
                     }
                 }
@@ -165,7 +163,7 @@ public struct ContentView: View {
             HStack(spacing: 24) {
                 // Bouton Undo (Annuler le dernier swipe)
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    withAnimation(.easeOut(duration: 0.15)) {
                         photoService.undoLastSwipe()
                     }
                 } label: {
@@ -185,8 +183,7 @@ public struct ContentView: View {
                 
                 // Bouton Jeter / Poubelle (Gauche)
                 Button {
-                    photoService.triggerHapticFeedback(.medium)
-                    withAnimation(.easeOut(duration: 0.22)) {
+                    withAnimation(.easeOut(duration: 0.12)) {
                         photoService.swipeCurrentCard(decision: .delete)
                     }
                 } label: {
@@ -208,8 +205,7 @@ public struct ContentView: View {
                 
                 // Bouton Garder (Droite)
                 Button {
-                    photoService.triggerHapticFeedback(.light)
-                    withAnimation(.easeOut(duration: 0.22)) {
+                    withAnimation(.easeOut(duration: 0.12)) {
                         photoService.swipeCurrentCard(decision: .keep)
                     }
                 } label: {

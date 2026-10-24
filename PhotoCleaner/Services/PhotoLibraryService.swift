@@ -125,7 +125,7 @@ public final class PhotoLibraryService: ObservableObject {
         imageManager.requestImage(
             for: asset,
             targetSize: targetImageSize,
-            contentMode: .aspectFill,
+            contentMode: .aspectFit,
             options: options
         ) { [weak self] image, _ in
             guard let self = self, let image = image else { return }
@@ -146,12 +146,6 @@ public final class PhotoLibraryService: ObservableObject {
         let swipedCard = activeCards.removeFirst()
         StorageService.shared.recordSwipe(assetId: swipedCard.id, decision: decision)
         
-        if decision == .keep {
-            triggerHapticFeedback(.light)
-        } else {
-            triggerHapticFeedback(.medium)
-        }
-        
         pendingDeleteCount = StorageService.shared.getPendingDeleteIDs().count
         replenishActiveCards()
     }
@@ -160,7 +154,6 @@ public final class PhotoLibraryService: ObservableObject {
         guard let record = StorageService.shared.undoLastSwipe() else { return }
         guard let asset = allAssetsDict[record.assetId] else { return }
         
-        triggerHapticFeedback(.medium)
         let card = PhotoCard(asset: asset)
         activeCards.insert(card, at: 0)
         loadImageForCard(assetId: record.assetId)
