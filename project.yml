@@ -33,3 +33,5 @@ targets:
     dependencies:
       - sdk: Photos.framework
       - sdk: PhotosUI.framework
+      - sdk: AVKit.framework
+      - sdk: AVFoundation.framework

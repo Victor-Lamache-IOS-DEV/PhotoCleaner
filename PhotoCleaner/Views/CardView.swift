@@ -1,58 +1,38 @@
 import SwiftUI
+import AVKit
 
 public struct CardView: View {
     public let card: PhotoCard
     public let isTopCard: Bool
     public let onSwipe: (SwipeDecision) -> Void
-    
+
     @State private var offset: CGSize = .zero
-    
+    @State private var player: AVPlayer? = nil
+
     private let swipeThreshold: CGFloat = 80
     private let emeraldGreen = Color(red: 0.19, green: 0.82, blue: 0.35)
     private let crimsonRed = Color(red: 0.95, green: 0.25, blue: 0.25)
-    
+
     public init(card: PhotoCard, isTopCard: Bool, onSwipe: @escaping (SwipeDecision) -> Void) {
         self.card = card
         self.isTopCard = isTopCard
         self.onSwipe = onSwipe
     }
-    
+
     public var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottomLeading) {
-                // Card Deep Dark Background
+                // Dark card background
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(Color(white: 0.08))
-                
-                // Photo Image: 100% Visible & Never Cropped
-                if let image = card.image {
-                    // Soft blurred ambient glow filling the card
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                        .blur(radius: 28)
-                        .opacity(0.35)
-                    
-                    // True full photo (contentMode: .fit) so nothing is ever cropped
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
+
+                if card.isVideo {
+                    videoContent(geometry: geometry)
                 } else {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.2)
-                        Text("Chargement...")
-                            .font(.system(size: 13, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    photoContent(geometry: geometry)
                 }
-                
-                // Bottom Gradient for crisp text readability
+
+                // Bottom gradient for text readability
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color.clear,
@@ -62,115 +42,37 @@ public struct CardView: View {
                     startPoint: .center,
                     endPoint: .bottom
                 )
-                
-                // Metadata Overlay (Bottom)
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        if card.isScreenshot {
-                            HStack(spacing: 4) {
-                                Image(systemName: "camera.viewfinder")
-                                    .font(.system(size: 10, weight: .bold))
-                                Text("CAPTURE")
-                                    .font(.system(size: 10, weight: .bold))
+
+                // Metadata overlay
+                metadataOverlay
+
+                // iCloud progress indicator
+                if card.isDownloadingFromICloud {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.7)
+                                Text("iCloud \(Int(card.iCloudDownloadProgress * 100))%")
+                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                    .foregroundColor(.white)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.orange.opacity(0.85))
-                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.black.opacity(0.6))
                             .clipShape(Capsule())
+                            .padding(12)
                         }
-                        
-                        if card.isLivePhoto {
-                            HStack(spacing: 4) {
-                                Image(systemName: "livephoto")
-                                    .font(.system(size: 10, weight: .bold))
-                                Text("LIVE")
-                                    .font(.system(size: 10, weight: .bold))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.85))
-                            .foregroundColor(.white)
-                            .clipShape(Capsule())
-                        }
-                        
-                        if card.isFavorite {
-                            Image(systemName: "heart.fill")
-                                .font(.system(size: 11))
-                                .foregroundColor(.pink)
-                                .padding(5)
-                                .background(Color.white.opacity(0.2))
-                                .clipShape(Circle())
-                        }
-                        
                         Spacer()
-                        
-                        Text(card.dimensions)
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.7))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Capsule())
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(card.formattedDate)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        if !card.relativeDate.isEmpty {
-                            Text(card.relativeDate.capitalized)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                        }
                     }
                 }
-                .padding(18)
-                
-                // SWIPE STAMPS
+
+                // Swipe stamps
                 if isTopCard {
-                    // KEEP Stamp (Right drag)
-                    HStack(spacing: 8) {
-                        Image(systemName: "heart.fill")
-                        Text("GARDER")
-                    }
-                    .font(.system(size: 24, weight: .black, design: .rounded))
-                    .foregroundColor(emeraldGreen)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.5))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(emeraldGreen, lineWidth: 3)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: emeraldGreen.opacity(0.6), radius: 8)
-                    .rotationEffect(.degrees(-15))
-                    .padding(20)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .opacity(Double(min(max(offset.width / swipeThreshold, 0), 1)))
-                    
-                    // DELETE Stamp (Left drag)
-                    HStack(spacing: 8) {
-                        Image(systemName: "trash.fill")
-                        Text("JETER")
-                    }
-                    .font(.system(size: 24, weight: .black, design: .rounded))
-                    .foregroundColor(crimsonRed)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.5))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(crimsonRed, lineWidth: 3)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: crimsonRed.opacity(0.6), radius: 8)
-                    .rotationEffect(.degrees(15))
-                    .padding(20)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .opacity(Double(min(max(-offset.width / swipeThreshold, 0), 1)))
+                    keepStamp
+                    deleteStamp
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -188,40 +90,241 @@ public struct CardView: View {
             .gesture(
                 isTopCard ?
                 DragGesture()
-                    .onChanged { gesture in
-                        offset = gesture.translation
-                    }
+                    .onChanged { gesture in offset = gesture.translation }
                     .onEnded { gesture in
                         if gesture.translation.width > swipeThreshold {
                             dismissRight(geometry: geometry)
                         } else if gesture.translation.width < -swipeThreshold {
                             dismissLeft(geometry: geometry)
                         } else {
-                            withAnimation(.easeOut(duration: 0.15)) {
-                                offset = .zero
-                            }
+                            withAnimation(.easeOut(duration: 0.15)) { offset = .zero }
                         }
                     }
                 : nil
             )
         }
     }
-    
+
+    // MARK: - Photo Content
+
+    @ViewBuilder
+    private func photoContent(geometry: GeometryProxy) -> some View {
+        if let image = card.image {
+            // Blurred ambient glow
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
+                .blur(radius: 28)
+                .opacity(0.35)
+
+            // Full photo — never cropped
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+        } else {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.2)
+                Text("Chargement...")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Video Content
+
+    @ViewBuilder
+    private func videoContent(geometry: GeometryProxy) -> some View {
+        if let image = card.image {
+            // Blurred ambient glow from thumbnail
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
+                .blur(radius: 28)
+                .opacity(0.35)
+
+            // Thumbnail with play overlay
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+
+            // Play button overlay
+            ZStack {
+                Circle()
+                    .fill(Color.black.opacity(0.5))
+                    .frame(width: 70, height: 70)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                    .offset(x: 3)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.2)
+                Text("Chargement vidéo...")
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    // MARK: - Metadata Overlay
+
+    private var metadataOverlay: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                if card.isVideo {
+                    HStack(spacing: 4) {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("VIDÉO")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.purple.opacity(0.85))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                } else if card.isScreenshot {
+                    HStack(spacing: 4) {
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("CAPTURE")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.85))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                }
+
+                if card.isLivePhoto {
+                    HStack(spacing: 4) {
+                        Image(systemName: "livephoto")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("LIVE")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.85))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                }
+
+                if card.isFavorite {
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.pink)
+                        .padding(5)
+                        .background(Color.white.opacity(0.2))
+                        .clipShape(Circle())
+                }
+
+                Spacer()
+
+                // Duration for videos OR dimensions for photos
+                if let duration = card.videoDuration {
+                    Text(duration)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.5))
+                        .clipShape(Capsule())
+                } else {
+                    Text(card.dimensions)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.5))
+                        .clipShape(Capsule())
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.formattedDate)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+
+                if !card.relativeDate.isEmpty {
+                    Text(card.relativeDate.capitalized)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+        }
+        .padding(18)
+    }
+
+    // MARK: - Stamps
+
+    private var keepStamp: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "heart.fill")
+            Text("GARDER")
+        }
+        .font(.system(size: 24, weight: .black, design: .rounded))
+        .foregroundColor(emeraldGreen)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(emeraldGreen, lineWidth: 3))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: emeraldGreen.opacity(0.6), radius: 8)
+        .rotationEffect(.degrees(-15))
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .opacity(Double(min(max(offset.width / swipeThreshold, 0), 1)))
+    }
+
+    private var deleteStamp: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "trash.fill")
+            Text("JETER")
+        }
+        .font(.system(size: 24, weight: .black, design: .rounded))
+        .foregroundColor(crimsonRed)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.5))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(crimsonRed, lineWidth: 3))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: crimsonRed.opacity(0.6), radius: 8)
+        .rotationEffect(.degrees(15))
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .opacity(Double(min(max(-offset.width / swipeThreshold, 0), 1)))
+    }
+
+    // MARK: - Dismiss
+
     private func dismissRight(geometry: GeometryProxy) {
         withAnimation(.easeOut(duration: 0.12)) {
             offset = CGSize(width: geometry.size.width * 1.3, height: 0)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
-            onSwipe(.keep)
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { onSwipe(.keep) }
     }
-    
+
     private func dismissLeft(geometry: GeometryProxy) {
         withAnimation(.easeOut(duration: 0.12)) {
             offset = CGSize(width: -geometry.size.width * 1.3, height: 0)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) {
-            onSwipe(.delete)
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { onSwipe(.delete) }
     }
 }

@@ -5,19 +5,19 @@ public struct ContentView: View {
     @StateObject private var photoService = PhotoLibraryService()
     @State private var showTrashSheet: Bool = false
     @State private var showStatsSheet: Bool = false
-    
+    @State private var showModeSelector: Bool = false
+
     private let emeraldGreen = Color(red: 0.19, green: 0.82, blue: 0.35)
     private let crimsonRed = Color(red: 0.95, green: 0.25, blue: 0.25)
     private let ambientGlow = Color(red: 0.2, green: 0.3, blue: 0.85)
-    
+
     public init() {}
-    
+
     public var body: some View {
         NavigationStack {
             ZStack {
-                // Fond sombre OLED avec lueur d'ambiance subtile
                 Color.black.ignoresSafeArea()
-                
+
                 RadialGradient(
                     gradient: Gradient(colors: [ambientGlow.opacity(0.16), Color.black]),
                     center: .top,
@@ -25,7 +25,7 @@ public struct ContentView: View {
                     endRadius: 460
                 )
                 .ignoresSafeArea()
-                
+
                 switch photoService.authorizationStatus {
                 case .authorized, .limited:
                     mainDeckView
@@ -45,15 +45,18 @@ public struct ContentView: View {
         .sheet(isPresented: $showStatsSheet) {
             StatsView(photoService: photoService)
         }
+        .sheet(isPresented: $showModeSelector) {
+            ModeSelectorSheet(photoService: photoService)
+        }
     }
-    
+
     // MARK: - Main Deck View
-    
+
     private var mainDeckView: some View {
         VStack(spacing: 12) {
             // Header Bar
             HStack(alignment: .center) {
-                // Bouton Statistiques / Progression
+                // Counter pill
                 Button {
                     photoService.triggerHapticFeedback(.light)
                     showStatsSheet = true
@@ -63,11 +66,11 @@ public struct ContentView: View {
                             .fill(emeraldGreen)
                             .frame(width: 7, height: 7)
                             .shadow(color: emeraldGreen, radius: 4)
-                        
+
                         Text("\(photoService.remainingUnreviewedCount)")
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
                             .foregroundColor(.white)
-                        
+
                         Text("RESTANTES")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.white.opacity(0.6))
@@ -76,26 +79,33 @@ public struct ContentView: View {
                     .padding(.vertical, 7)
                     .background(Color.white.opacity(0.08))
                     .clipShape(Capsule())
-                    .overlay(
-                        Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1)
-                    )
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
                 }
-                
+
                 Spacer()
-                
-                Text("PhotoCleaner")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.white, .white.opacity(0.75)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                
+
+                // Mode selector button
+                Button {
+                    photoService.triggerHapticFeedback(.light)
+                    showModeSelector = true
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: photoService.browseMode.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(photoService.browseMode.rawValue.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                }
+
                 Spacer()
-                
-                // Bouton Corbeille
+
+                // Trash button
                 Button {
                     photoService.triggerHapticFeedback(.light)
                     showTrashSheet = true
@@ -107,10 +117,8 @@ public struct ContentView: View {
                             .padding(10)
                             .background(Color.white.opacity(0.08))
                             .clipShape(Circle())
-                            .overlay(
-                                Circle().stroke(Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                        
+                            .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+
                         if photoService.pendingDeleteCount > 0 {
                             Text("\(photoService.pendingDeleteCount)")
                                 .font(.system(size: 10, weight: .heavy))
@@ -127,14 +135,14 @@ public struct ContentView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 4)
-            
-            // Zone des Cartes
+
+            // Card zone
             if photoService.isLoading {
                 VStack(spacing: 16) {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(1.3)
-                    Text("Mélange aléatoire des photos...")
+                    Text("Chargement \(photoService.browseMode.rawValue.lowercased())...")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
                         .foregroundColor(.white.opacity(0.6))
                 }
@@ -158,10 +166,10 @@ public struct ContentView: View {
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            
-            // Barre de boutons d'action inférieure
+
+            // Action buttons
             HStack(spacing: 24) {
-                // Bouton Undo (Annuler le dernier swipe)
+                // Undo
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) {
                         photoService.undoLastSwipe()
@@ -173,15 +181,13 @@ public struct ContentView: View {
                         .frame(width: 52, height: 52)
                         .background(Color.white.opacity(0.08))
                         .clipShape(Circle())
-                        .overlay(
-                            Circle().stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                        )
+                        .overlay(Circle().stroke(Color.orange.opacity(0.3), lineWidth: 1))
                         .shadow(color: Color.orange.opacity(0.2), radius: 8)
                 }
                 .disabled(!StorageService.shared.canUndo())
                 .opacity(StorageService.shared.canUndo() ? 1.0 : 0.3)
-                
-                // Bouton Jeter / Poubelle (Gauche)
+
+                // Delete button
                 Button {
                     withAnimation(.easeOut(duration: 0.12)) {
                         photoService.swipeCurrentCard(decision: .delete)
@@ -202,8 +208,8 @@ public struct ContentView: View {
                         .shadow(color: crimsonRed.opacity(0.45), radius: 12, y: 4)
                 }
                 .disabled(photoService.activeCards.isEmpty)
-                
-                // Bouton Garder (Droite)
+
+                // Keep button
                 Button {
                     withAnimation(.easeOut(duration: 0.12)) {
                         photoService.swipeCurrentCard(decision: .keep)
@@ -228,26 +234,42 @@ public struct ContentView: View {
             .padding(.bottom, 16)
         }
     }
-    
-    // MARK: - Écran de fin (Toutes les photos triées)
-    
+
+    // MARK: - All Done
+
     private var allDoneView: some View {
         VStack(spacing: 20) {
             Image(systemName: "sparkles")
                 .font(.system(size: 64))
                 .foregroundColor(.yellow)
                 .shadow(color: .yellow.opacity(0.5), radius: 12)
-            
-            Text("Galerie entièrement triée !")
+
+            Text("Tout trié !")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundColor(.white)
-            
-            Text("Vous avez classé toutes les photos existantes. Les nouveaux clichés pris avec votre appareil apparaîtront automatiquement ici.")
+
+            Text("Plus de \(photoService.browseMode.rawValue.lowercased()) à trier dans cette catégorie.")
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 36)
-            
+
+            Button {
+                photoService.triggerHapticFeedback(.light)
+                showModeSelector = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.grid.2x2")
+                    Text("Changer de catégorie")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .background(Color.white.opacity(0.12))
+                .clipShape(Capsule())
+            }
+
             if photoService.pendingDeleteCount > 0 {
                 Button {
                     photoService.triggerHapticFeedback(.medium)
@@ -265,31 +287,30 @@ public struct ContentView: View {
                     .clipShape(Capsule())
                     .shadow(color: crimsonRed.opacity(0.4), radius: 10, y: 4)
                 }
-                .padding(.top, 8)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     // MARK: - Permissions
-    
+
     private var permissionPromptView: some View {
         VStack(spacing: 22) {
             Image(systemName: "photo.on.rectangle.angled")
                 .font(.system(size: 72))
                 .foregroundColor(ambientGlow)
                 .shadow(color: ambientGlow.opacity(0.6), radius: 16)
-            
+
             Text("Bienvenue sur PhotoCleaner")
                 .font(.system(size: 28, weight: .heavy))
                 .foregroundColor(.white)
-            
-            Text("Nettoyez votre pellicule rapidement façon Tinder. Swipez à droite pour garder, à gauche pour supprimer. Tout est mémorisé.")
+
+            Text("Nettoyez votre pellicule rapidement façon Tinder. Swipez à droite pour garder, à gauche pour supprimer.")
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 36)
-            
+
             Button {
                 photoService.triggerHapticFeedback(.medium)
                 photoService.requestPermission()
@@ -308,23 +329,23 @@ public struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     private var permissionDeniedView: some View {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 56))
                 .foregroundColor(.orange)
-            
+
             Text("Accès aux photos requis")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
-            
-            Text("PhotoSwipe a besoin de l'accès à vos photos pour fonctionner. Activez l'accès dans les Réglages de votre iPhone.")
+
+            Text("PhotoCleaner a besoin de l'accès à vos photos pour fonctionner. Activez l'accès dans les Réglages.")
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
-            
+
             Button("Ouvrir les Réglages") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
@@ -338,5 +359,110 @@ public struct ContentView: View {
             .clipShape(Capsule())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Mode Selector Sheet
+
+struct ModeSelectorSheet: View {
+    @ObservedObject var photoService: PhotoLibraryService
+    @Environment(\.dismiss) private var dismiss
+
+    private let columns = [GridItem(.flexible()), GridItem(.flexible())]
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("PHOTOS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
+                            .padding(.horizontal, 20)
+
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(BrowseMode.allCases.filter { !$0.isVideo }) { mode in
+                                ModeCard(mode: mode, isSelected: photoService.browseMode == mode) {
+                                    photoService.triggerHapticFeedback(.light)
+                                    photoService.browseMode = mode
+                                    dismiss()
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+
+                        Text("VIDÉOS")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
+                            .padding(.horizontal, 20)
+                            .padding(.top, 4)
+
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(BrowseMode.allCases.filter { $0.isVideo }) { mode in
+                                ModeCard(mode: mode, isSelected: photoService.browseMode == mode) {
+                                    photoService.triggerHapticFeedback(.light)
+                                    photoService.browseMode = mode
+                                    dismiss()
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .padding(.vertical, 20)
+                }
+            }
+            .navigationTitle("Catégories")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Fermer") { dismiss() }
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+        .preferredColorScheme(.dark)
+    }
+}
+
+struct ModeCard: View {
+    let mode: BrowseMode
+    let isSelected: Bool
+    let action: () -> Void
+
+    private let accentBlue = Color(red: 0.2, green: 0.3, blue: 0.85)
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.8))
+
+                Text(mode.rawValue)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .background(
+                isSelected
+                    ? AnyView(LinearGradient(
+                        colors: [accentBlue, accentBlue.opacity(0.7)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    : AnyView(Color.white.opacity(0.07))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? accentBlue : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+            )
+            .shadow(color: isSelected ? accentBlue.opacity(0.4) : .clear, radius: 8)
+        }
     }
 }
