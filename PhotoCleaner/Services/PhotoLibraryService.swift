@@ -9,7 +9,7 @@ public enum MediaKind: String, CaseIterable, Identifiable {
     case photos = "Photos"
     case videos = "Vidéos"
     public var id: String { rawValue }
-    
+
     public var icon: String {
         switch self {
         case .photos: return "photo.stack"
@@ -27,7 +27,7 @@ public enum BrowseMode: String, CaseIterable, Identifiable {
     case photoScreenshots      = "Captures d'écran"
     case photoWebSaved         = "Enregistrées du web"
     case photoHeaviest         = "Plus gourmandes"
-    
+
     // Videos
     case videoRandom           = "Aléatoire (Vidéos)"
     case videoLastWeek         = "Cette semaine (Vidéos)"
@@ -158,7 +158,7 @@ public final class PhotoLibraryService: ObservableObject {
         }
     }
 
-    // MARK: - Library Loading
+    // MARK: - Library Loading (Zero-Crash Pure Swift Filtering)
 
     public func loadLibrary() {
         isLoading = true
@@ -176,11 +176,17 @@ public final class PhotoLibraryService: ObservableObject {
             guard let self = self else { return }
 
             let fetchOptions = PHFetchOptions()
-            fetchOptions.predicate = Self.buildPredicate(for: currentMode)
             fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            // NEVER set unsupported predicates on PHFetchOptions to avoid PhotoKit NSInvalidArgumentException!
+            fetchOptions.predicate = nil
 
             let allAssets = PHAsset.fetchAssets(with: mediaType, options: fetchOptions)
             let totalCount = allAssets.count
+
+            let now = Date()
+            let calendar = Calendar.current
+            let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now) ?? now
 
             var unreviewed: [String] = []
             var assetMap: [String: PHAsset] = [:]
@@ -188,7 +194,49 @@ public final class PhotoLibraryService: ObservableObject {
             allAssets.enumerateObjects { asset, _, _ in
                 let id = asset.localIdentifier
                 assetMap[id] = asset
-                if !StorageService.shared.isReviewed(assetId: id) && !unreviewed.contains(id) {
+
+                // Skip if already reviewed
+                guard !StorageService.shared.isReviewed(assetId: id) else { return }
+
+                // Safe pure Swift filtering (completely crash-proof)
+                let matches: Bool
+                switch currentMode {
+                case .photoRandom, .photoHeaviest, .videoRandom, .videoHeaviest:
+                    matches = true
+
+                case .photoLastWeek, .videoLastWeek:
+                    if let date = asset.creationDate {
+                        matches = (date >= weekAgo)
+                    } else {
+                        matches = false
+                    }
+
+                case .photoLastMonth, .videoLastMonth:
+                    if let date = asset.creationDate {
+                        matches = (date >= monthAgo)
+                    } else {
+                        matches = false
+                    }
+
+                case .photoScreenshots:
+                    matches = asset.mediaSubtypes.contains(.photoScreenshot)
+
+                case .videoScreenRecordings:
+                    if #available(iOS 15.0, *) {
+                        matches = asset.mediaSubtypes.contains(.videoScreenRecording)
+                    } else {
+                        matches = true
+                    }
+
+                case .photoWebSaved:
+                    let isCameraCapture = asset.mediaSubtypes.contains(.photoHDR) ||
+                                          asset.mediaSubtypes.contains(.photoLive) ||
+                                          asset.mediaSubtypes.contains(.photoPanorama) ||
+                                          asset.mediaSubtypes.contains(.photoScreenshot)
+                    matches = !isCameraCapture
+                }
+
+                if matches && !unreviewed.contains(id) {
                     unreviewed.append(id)
                 }
             }
@@ -203,7 +251,7 @@ public final class PhotoLibraryService: ObservableObject {
                     return (a1.pixelWidth * a1.pixelHeight) > (a2.pixelWidth * a2.pixelHeight)
                 }
             case .videoHeaviest:
-                // Weight videos by duration * resolution
+                // Weight videos by duration * resolution (largest first)
                 unreviewed.sort {
                     guard let a1 = assetMap[$0], let a2 = assetMap[$1] else { return false }
                     let weight1 = a1.duration * Double(a1.pixelWidth * a1.pixelHeight)
@@ -230,39 +278,6 @@ public final class PhotoLibraryService: ObservableObject {
 
     private func reloadForCurrentMode() {
         loadLibrary()
-    }
-
-    // MARK: - Predicates
-
-    private static func buildPredicate(for mode: BrowseMode) -> NSPredicate {
-        let now = Date()
-        let calendar = Calendar.current
-
-        switch mode {
-        case .photoRandom, .photoHeaviest, .videoRandom, .videoHeaviest:
-            return NSPredicate(value: true)
-
-        case .photoLastWeek, .videoLastWeek:
-            let weekAgo = calendar.date(byAdding: .day, value: -7, to: now)!
-            return NSPredicate(format: "creationDate >= %@", weekAgo as NSDate)
-
-        case .photoLastMonth, .videoLastMonth:
-            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now)!
-            return NSPredicate(format: "creationDate >= %@", monthAgo as NSDate)
-
-        case .photoScreenshots:
-            return NSPredicate(format: "(mediaSubtype & %d) != 0", PHAssetMediaSubtype.photoScreenshot.rawValue)
-
-        case .videoScreenRecordings:
-            if #available(iOS 15.0, *) {
-                return NSPredicate(format: "(mediaSubtype & %d) != 0", PHAssetMediaSubtype.videoScreenRecording.rawValue)
-            } else {
-                return NSPredicate(value: true)
-            }
-
-        case .photoWebSaved:
-            return NSPredicate(format: "((mediaSubtype & %d) == 0)", PHAssetMediaSubtype.photoScreenshot.rawValue)
-        }
     }
 
     // MARK: - Card Buffer Management
