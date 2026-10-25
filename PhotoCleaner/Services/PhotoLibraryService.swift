@@ -2,32 +2,97 @@ import Foundation
 import Photos
 import UIKit
 import SwiftUI
+import AVKit
+
+// MARK: - Media Category
+public enum MediaKind: String, CaseIterable, Identifiable {
+    case photos = "Photos"
+    case videos = "Vidéos"
+    public var id: String { rawValue }
+    
+    public var icon: String {
+        switch self {
+        case .photos: return "photo.stack"
+        case .videos: return "play.rectangle.fill"
+        }
+    }
+}
 
 // MARK: - Browse Mode
 public enum BrowseMode: String, CaseIterable, Identifiable {
-    case random        = "Aléatoire"
-    case lastMonth     = "Ce mois"
-    case lastWeek      = "Cette semaine"
-    case screenshots   = "Captures d'écran"
-    case webSaved      = "Enregistrées du web"
-    case heaviest      = "Plus gourmandes"
-    case videos        = "Vidéos"
+    // Photos
+    case photoRandom           = "Aléatoire"
+    case photoLastWeek         = "Cette semaine"
+    case photoLastMonth        = "Ce mois"
+    case photoScreenshots      = "Captures d'écran"
+    case photoWebSaved         = "Enregistrées du web"
+    case photoHeaviest         = "Plus gourmandes"
+    
+    // Videos
+    case videoRandom           = "Aléatoire (Vidéos)"
+    case videoLastWeek         = "Cette semaine (Vidéos)"
+    case videoLastMonth        = "Ce mois (Vidéos)"
+    case videoScreenRecordings = "Enregistrements d'écran"
+    case videoHeaviest         = "Plus gourmandes (Vidéos)"
 
     public var id: String { rawValue }
 
-    public var icon: String {
+    public var isVideo: Bool {
         switch self {
-        case .random:      return "shuffle"
-        case .lastMonth:   return "calendar"
-        case .lastWeek:    return "calendar.badge.clock"
-        case .screenshots: return "camera.viewfinder"
-        case .webSaved:    return "arrow.down.circle"
-        case .heaviest:    return "scalemass.fill"
-        case .videos:      return "play.rectangle.fill"
+        case .videoRandom, .videoLastWeek, .videoLastMonth, .videoScreenRecordings, .videoHeaviest:
+            return true
+        default:
+            return false
         }
     }
 
-    public var isVideo: Bool { self == .videos }
+    public var icon: String {
+        switch self {
+        case .photoRandom:           return "shuffle"
+        case .photoLastWeek:         return "calendar.badge.clock"
+        case .photoLastMonth:        return "calendar"
+        case .photoScreenshots:      return "camera.viewfinder"
+        case .photoWebSaved:         return "arrow.down.circle"
+        case .photoHeaviest:         return "scalemass.fill"
+        case .videoRandom:           return "shuffle"
+        case .videoLastWeek:         return "calendar.badge.clock"
+        case .videoLastMonth:        return "calendar"
+        case .videoScreenRecordings: return "record.circle"
+        case .videoHeaviest:         return "scalemass.fill"
+        }
+    }
+
+    public var shortLabel: String {
+        switch self {
+        case .photoRandom:           return "Aléatoire"
+        case .photoLastWeek:         return "Semaine"
+        case .photoLastMonth:        return "Ce mois"
+        case .photoScreenshots:      return "Captures"
+        case .photoWebSaved:         return "Web"
+        case .photoHeaviest:         return "Lourdes"
+        case .videoRandom:           return "Vidéos · Aléatoire"
+        case .videoLastWeek:         return "Vidéos · Semaine"
+        case .videoLastMonth:        return "Vidéos · Mois"
+        case .videoScreenRecordings: return "Recs Écran"
+        case .videoHeaviest:         return "Vidéos · Lourdes"
+        }
+    }
+
+    public var cleanTitle: String {
+        switch self {
+        case .photoRandom:           return "Aléatoire"
+        case .photoLastWeek:         return "Cette semaine"
+        case .photoLastMonth:        return "Ce mois"
+        case .photoScreenshots:      return "Captures d'écran"
+        case .photoWebSaved:         return "Enregistrées du web"
+        case .photoHeaviest:         return "Plus gourmandes"
+        case .videoRandom:           return "Aléatoire"
+        case .videoLastWeek:         return "Cette semaine"
+        case .videoLastMonth:        return "Ce mois"
+        case .videoScreenRecordings: return "Enregistrements d'écran"
+        case .videoHeaviest:         return "Plus gourmandes"
+        }
+    }
 }
 
 @MainActor
@@ -39,7 +104,7 @@ public final class PhotoLibraryService: ObservableObject {
     @Published public var isLoading: Bool = false
     @Published public var errorMessage: String? = nil
     @Published public var pendingDeleteCount: Int = 0
-    @Published public var browseMode: BrowseMode = .random {
+    @Published public var browseMode: BrowseMode = .photoRandom {
         didSet {
             if oldValue != browseMode {
                 reloadForCurrentMode()
@@ -103,15 +168,16 @@ public final class PhotoLibraryService: ObservableObject {
         allAssetsDict = [:]
         cancelAllImageRequests()
 
+        let currentMode = self.browseMode
+        let isVideo = currentMode.isVideo
+        let mediaType: PHAssetMediaType = isVideo ? .video : .image
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
-            let isVideo = self.browseMode.isVideo
-            let mediaType: PHAssetMediaType = isVideo ? .video : .image
-
             let fetchOptions = PHFetchOptions()
-            fetchOptions.predicate = Self.buildPredicate(for: self.browseMode)
-            fetchOptions.sortDescriptors = Self.buildSortDescriptors(for: self.browseMode)
+            fetchOptions.predicate = Self.buildPredicate(for: currentMode)
+            fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
 
             let allAssets = PHAsset.fetchAssets(with: mediaType, options: fetchOptions)
             let totalCount = allAssets.count
@@ -122,25 +188,31 @@ public final class PhotoLibraryService: ObservableObject {
             allAssets.enumerateObjects { asset, _, _ in
                 let id = asset.localIdentifier
                 assetMap[id] = asset
-                // Guard against duplicate IDs
-                if !StorageService.shared.isReviewed(assetId: id) && assetMap[id] != nil && !unreviewed.contains(id) {
+                if !StorageService.shared.isReviewed(assetId: id) && !unreviewed.contains(id) {
                     unreviewed.append(id)
                 }
             }
 
-            // Sort or shuffle based on mode
-            switch self.browseMode {
-            case .random:
+            // Ordering based on mode
+            switch currentMode {
+            case .photoRandom, .videoRandom:
                 unreviewed.shuffle()
-            case .heaviest:
-                // Already sorted by resource size via sort descriptor on asset (largest first)
-                // PHAsset doesn't expose byte size in predicate, we sort by pixel area as proxy
+            case .photoHeaviest:
                 unreviewed.sort {
                     guard let a1 = assetMap[$0], let a2 = assetMap[$1] else { return false }
                     return (a1.pixelWidth * a1.pixelHeight) > (a2.pixelWidth * a2.pixelHeight)
                 }
-            case .lastWeek, .lastMonth, .screenshots, .webSaved, .videos:
-                // Sorted by date descending already via sort descriptor
+            case .videoHeaviest:
+                // Weight videos by duration * resolution
+                unreviewed.sort {
+                    guard let a1 = assetMap[$0], let a2 = assetMap[$1] else { return false }
+                    let weight1 = a1.duration * Double(a1.pixelWidth * a1.pixelHeight)
+                    let weight2 = a2.duration * Double(a2.pixelWidth * a2.pixelHeight)
+                    return weight1 > weight2
+                }
+            case .photoLastWeek, .photoLastMonth, .photoScreenshots, .photoWebSaved,
+                 .videoLastWeek, .videoLastMonth, .videoScreenRecordings:
+                // Already sorted chronologically descending by fetchOptions
                 break
             }
 
@@ -160,41 +232,37 @@ public final class PhotoLibraryService: ObservableObject {
         loadLibrary()
     }
 
-    // MARK: - Predicates & Sort Descriptors
+    // MARK: - Predicates
 
     private static func buildPredicate(for mode: BrowseMode) -> NSPredicate {
         let now = Date()
         let calendar = Calendar.current
 
         switch mode {
-        case .random, .heaviest, .videos:
+        case .photoRandom, .photoHeaviest, .videoRandom, .videoHeaviest:
             return NSPredicate(value: true)
 
-        case .lastWeek:
+        case .photoLastWeek, .videoLastWeek:
             let weekAgo = calendar.date(byAdding: .day, value: -7, to: now)!
             return NSPredicate(format: "creationDate >= %@", weekAgo as NSDate)
 
-        case .lastMonth:
+        case .photoLastMonth, .videoLastMonth:
             let monthAgo = calendar.date(byAdding: .month, value: -1, to: now)!
             return NSPredicate(format: "creationDate >= %@", monthAgo as NSDate)
 
-        case .screenshots:
-            // mediaSubtype bitmask for screenshots = 8
+        case .photoScreenshots:
             return NSPredicate(format: "(mediaSubtype & %d) != 0", PHAssetMediaSubtype.photoScreenshot.rawValue)
 
-        case .webSaved:
-            // User library photos that were not taken with camera (no GPS typically)
-            // Use albumType filtering or detect via source: PHAssetSourceType.typeUserLibrary excludes camera roll
-            // We filter for images that are NOT screenshots and have no camera subtype
-            let cameraSubtype = PHAssetMediaSubtype.photoHDR.rawValue |
-                                PHAssetMediaSubtype.photoLive.rawValue |
-                                PHAssetMediaSubtype.photoPanorama.rawValue
+        case .videoScreenRecordings:
+            if #available(iOS 15.0, *) {
+                return NSPredicate(format: "(mediaSubtype & %d) != 0", PHAssetMediaSubtype.videoScreenRecording.rawValue)
+            } else {
+                return NSPredicate(value: true)
+            }
+
+        case .photoWebSaved:
             return NSPredicate(format: "((mediaSubtype & %d) == 0)", PHAssetMediaSubtype.photoScreenshot.rawValue)
         }
-    }
-
-    private static func buildSortDescriptors(for mode: BrowseMode) -> [NSSortDescriptor] {
-        return [NSSortDescriptor(key: "creationDate", ascending: false)]
     }
 
     // MARK: - Card Buffer Management
@@ -203,7 +271,6 @@ public final class PhotoLibraryService: ObservableObject {
         let bufferSize = 3
         while activeCards.count < bufferSize && !allUnreviewedAssetIDs.isEmpty {
             let nextId = allUnreviewedAssetIDs.removeFirst()
-            // Double-check we don't already have this card active (safety guard)
             guard !activeCards.contains(where: { $0.id == nextId }) else { continue }
             if let asset = allAssetsDict[nextId] {
                 let card = PhotoCard(asset: asset)
@@ -217,12 +284,11 @@ public final class PhotoLibraryService: ObservableObject {
     private func loadImageForCard(assetId: String) {
         guard let asset = allAssetsDict[assetId] else { return }
 
-        // Cancel any previous request for this card
         if let oldRequestID = activeImageRequestIDs[assetId] {
             imageManager.cancelImageRequest(oldRequestID)
         }
 
-        // Step 1: Request low-quality thumbnail immediately for instant display
+        // Fast thumbnail pass
         let thumbOptions = PHImageRequestOptions()
         thumbOptions.deliveryMode = .fastFormat
         thumbOptions.isNetworkAccessAllowed = false
@@ -244,14 +310,13 @@ public final class PhotoLibraryService: ObservableObject {
             }
         }
 
-        // Step 2: Request full quality (downloads from iCloud if needed)
+        // Full HD quality pass (downloads from iCloud if needed)
         let hdOptions = PHImageRequestOptions()
         hdOptions.deliveryMode = .highQualityFormat
-        hdOptions.isNetworkAccessAllowed = true   // ← Key: fetch from iCloud
+        hdOptions.isNetworkAccessAllowed = true
         hdOptions.isSynchronous = false
         hdOptions.resizeMode = .exact
         hdOptions.progressHandler = { progress, _, _, _ in
-            // iCloud download progress (could show in UI later)
             DispatchQueue.main.async {
                 if let index = self.activeCards.firstIndex(where: { $0.id == assetId }) {
                     self.activeCards[index].iCloudDownloadProgress = progress
@@ -288,20 +353,17 @@ public final class PhotoLibraryService: ObservableObject {
         activeImageRequestIDs.removeAll()
     }
 
-    // MARK: - Video Thumbnail
+    // MARK: - Video Playback Provider
 
-    public func loadVideoThumbnail(for asset: PHAsset, completion: @escaping (UIImage?) -> Void) {
-        let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
+    public func requestPlayerItem(for asset: PHAsset, completion: @escaping (AVPlayerItem?) -> Void) {
+        let options = PHVideoRequestOptions()
         options.isNetworkAccessAllowed = true
+        options.deliveryMode = .automatic
 
-        imageManager.requestImage(
-            for: asset,
-            targetSize: CGSize(width: 800, height: 1200),
-            contentMode: .aspectFit,
-            options: options
-        ) { image, _ in
-            DispatchQueue.main.async { completion(image) }
+        imageManager.requestPlayerItem(forVideo: asset, options: options) { item, _ in
+            DispatchQueue.main.async {
+                completion(item)
+            }
         }
     }
 
@@ -312,7 +374,6 @@ public final class PhotoLibraryService: ObservableObject {
 
         let swipedCard = activeCards.removeFirst()
 
-        // Cancel its image request (no longer needed)
         if let requestID = activeImageRequestIDs[swipedCard.id] {
             imageManager.cancelImageRequest(requestID)
             activeImageRequestIDs.removeValue(forKey: swipedCard.id)
@@ -327,7 +388,6 @@ public final class PhotoLibraryService: ObservableObject {
         guard let record = StorageService.shared.undoLastSwipe() else { return }
         guard let asset = allAssetsDict[record.assetId] else { return }
 
-        // Guard: don't add if already in active cards
         guard !activeCards.contains(where: { $0.id == record.assetId }) else { return }
 
         let card = PhotoCard(asset: asset)
@@ -338,7 +398,7 @@ public final class PhotoLibraryService: ObservableObject {
         remainingUnreviewedCount = allUnreviewedAssetIDs.count + activeCards.count
     }
 
-    // MARK: - Safe Batch Deletion (Apple Native Sheet)
+    // MARK: - Safe Batch Deletion
 
     public func deletePendingPhotos(completion: @escaping (Bool) -> Void) {
         let pendingIDs = Array(StorageService.shared.getPendingDeleteIDs())

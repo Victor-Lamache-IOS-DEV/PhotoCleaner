@@ -84,23 +84,36 @@ public struct ContentView: View {
 
                 Spacer()
 
-                // Mode selector button
+                // Mode selector button in center
                 Button {
                     photoService.triggerHapticFeedback(.light)
                     showModeSelector = true
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Image(systemName: photoService.browseMode.icon)
                             .font(.system(size: 12, weight: .semibold))
-                        Text(photoService.browseMode.rawValue.uppercased())
-                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(photoService.browseMode.isVideo ? .purple : ambientGlow)
+
+                        Text(photoService.browseMode.shortLabel.uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
                     }
-                    .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.1))
+                    .background(Color.white.opacity(0.09))
                     .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                    .overlay(
+                        Capsule().stroke(
+                            photoService.browseMode.isVideo
+                                ? Color.purple.opacity(0.4)
+                                : Color.white.opacity(0.15),
+                            lineWidth: 1
+                        )
+                    )
                 }
 
                 Spacer()
@@ -142,7 +155,7 @@ public struct ContentView: View {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(1.3)
-                    Text("Chargement \(photoService.browseMode.rawValue.lowercased())...")
+                    Text("Chargement \(photoService.browseMode.cleanTitle.lowercased())...")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
                         .foregroundColor(.white.opacity(0.6))
                 }
@@ -156,6 +169,7 @@ public struct ContentView: View {
                         CardView(
                             card: card,
                             isTopCard: isTop,
+                            photoService: photoService,
                             onSwipe: { decision in
                                 photoService.swipeCurrentCard(decision: decision)
                             }
@@ -248,7 +262,7 @@ public struct ContentView: View {
                 .font(.system(size: 24, weight: .bold))
                 .foregroundColor(.white)
 
-            Text("Plus de \(photoService.browseMode.rawValue.lowercased()) à trier dans cette catégorie.")
+            Text("Plus aucun élément à trier dans \(photoService.browseMode.cleanTitle.lowercased()).")
                 .font(.system(size: 14))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
@@ -258,9 +272,9 @@ public struct ContentView: View {
                 photoService.triggerHapticFeedback(.light)
                 showModeSelector = true
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "square.grid.2x2")
-                    Text("Changer de catégorie")
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2.fill")
+                    Text("Choisir un autre mode")
                         .font(.system(size: 15, weight: .bold))
                 }
                 .foregroundColor(.white)
@@ -362,58 +376,90 @@ public struct ContentView: View {
     }
 }
 
-// MARK: - Mode Selector Sheet
+// MARK: - Mode Selector Sheet with Tabs (Photos vs Vidéos)
 
 struct ModeSelectorSheet: View {
     @ObservedObject var photoService: PhotoLibraryService
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedTab: MediaKind = .photos
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
+
+    init(photoService: PhotoLibraryService) {
+        self.photoService = photoService
+        _selectedTab = State(initialValue: photoService.browseMode.isVideo ? .videos : .photos)
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("PHOTOS")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white.opacity(0.4))
-                            .padding(.horizontal, 20)
-
-                        LazyVGrid(columns: columns, spacing: 12) {
-                            ForEach(BrowseMode.allCases.filter { !$0.isVideo }) { mode in
-                                ModeCard(mode: mode, isSelected: photoService.browseMode == mode) {
-                                    photoService.triggerHapticFeedback(.light)
-                                    photoService.browseMode = mode
-                                    dismiss()
+                VStack(spacing: 16) {
+                    // Segmented Control: [📷 Photos] | [🎬 Vidéos]
+                    HStack(spacing: 0) {
+                        ForEach(MediaKind.allCases) { kind in
+                            Button {
+                                photoService.triggerHapticFeedback(.light)
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedTab = kind
                                 }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: kind.icon)
+                                        .font(.system(size: 13, weight: .bold))
+                                    Text(kind.rawValue)
+                                        .font(.system(size: 14, weight: .bold))
+                                }
+                                .foregroundColor(selectedTab == kind ? .white : .white.opacity(0.5))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    selectedTab == kind
+                                        ? (kind == .videos ? Color.purple.opacity(0.8) : Color(red: 0.2, green: 0.3, blue: 0.85))
+                                        : Color.clear
+                                )
+                                .clipShape(Capsule())
                             }
                         }
-                        .padding(.horizontal, 16)
-
-                        Text("VIDÉOS")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.white.opacity(0.4))
-                            .padding(.horizontal, 20)
-                            .padding(.top, 4)
-
-                        LazyVGrid(columns: columns, spacing: 12) {
-                            ForEach(BrowseMode.allCases.filter { $0.isVideo }) { mode in
-                                ModeCard(mode: mode, isSelected: photoService.browseMode == mode) {
-                                    photoService.triggerHapticFeedback(.light)
-                                    photoService.browseMode = mode
-                                    dismiss()
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
                     }
-                    .padding(.vertical, 20)
+                    .padding(4)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+
+                    // Grid of modes for selected category
+                    ScrollView {
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            if selectedTab == .photos {
+                                ForEach(BrowseMode.allCases.filter { !$0.isVideo }) { mode in
+                                    ModeCard(
+                                        mode: mode,
+                                        accentColor: Color(red: 0.2, green: 0.3, blue: 0.85),
+                                        isSelected: photoService.browseMode == mode
+                                    ) {
+                                        selectMode(mode)
+                                    }
+                                }
+                            } else {
+                                ForEach(BrowseMode.allCases.filter { $0.isVideo }) { mode in
+                                    ModeCard(
+                                        mode: mode,
+                                        accentColor: Color.purple,
+                                        isSelected: photoService.browseMode == mode
+                                    ) {
+                                        selectMode(mode)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 24)
+                    }
                 }
             }
-            .navigationTitle("Catégories")
+            .navigationTitle("Catégories & Modes")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -422,47 +468,52 @@ struct ModeSelectorSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
         .preferredColorScheme(.dark)
+    }
+
+    private func selectMode(_ mode: BrowseMode) {
+        photoService.triggerHapticFeedback(.medium)
+        photoService.browseMode = mode
+        dismiss()
     }
 }
 
 struct ModeCard: View {
     let mode: BrowseMode
+    let accentColor: Color
     let isSelected: Bool
     let action: () -> Void
-
-    private let accentBlue = Color(red: 0.2, green: 0.3, blue: 0.85)
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 10) {
                 Image(systemName: mode.icon)
                     .font(.system(size: 26, weight: .semibold))
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.8))
+                    .foregroundColor(isSelected ? .white : accentColor)
 
-                Text(mode.rawValue)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.7))
+                Text(mode.cleanTitle)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.85))
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
+            .padding(.vertical, 22)
             .background(
                 isSelected
                     ? AnyView(LinearGradient(
-                        colors: [accentBlue, accentBlue.opacity(0.7)],
+                        colors: [accentColor, accentColor.opacity(0.7)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
-                    : AnyView(Color.white.opacity(0.07))
+                    : AnyView(Color.white.opacity(0.06))
             )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isSelected ? accentBlue : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+                    .stroke(isSelected ? accentColor : Color.white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
             )
-            .shadow(color: isSelected ? accentBlue.opacity(0.4) : .clear, radius: 8)
+            .shadow(color: isSelected ? accentColor.opacity(0.4) : .clear, radius: 8)
         }
     }
 }

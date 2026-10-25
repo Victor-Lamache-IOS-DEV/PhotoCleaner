@@ -33,6 +33,13 @@ public struct PhotoCard: Identifiable, Equatable {
         asset.mediaSubtypes.contains(.photoScreenshot)
     }
 
+    public var isScreenRecording: Bool {
+        if #available(iOS 15.0, *) {
+            return asset.mediaSubtypes.contains(.videoScreenRecording)
+        }
+        return false
+    }
+
     public var isLivePhoto: Bool {
         asset.mediaSubtypes.contains(.photoLive)
     }
@@ -51,17 +58,10 @@ public struct PhotoCard: Identifiable, Equatable {
 
     public var videoDuration: String? {
         guard isVideo else { return nil }
-        let seconds = Int(asset.duration)
-        let m = seconds / 60
-        let s = seconds % 60
+        let totalSeconds = Int(asset.duration.rounded())
+        let m = totalSeconds / 60
+        let s = totalSeconds % 60
         return String(format: "%d:%02d", m, s)
-    }
-
-    /// Approximate file size in megabytes using pixel area as proxy
-    public var estimatedSizeMB: Double {
-        let pixels = Double(asset.pixelWidth * asset.pixelHeight)
-        // ~3 bytes/pixel for HEIC, ~0.5 compression factor
-        return (pixels * 3.0 * 0.5) / (1024 * 1024)
     }
 
     public var isDownloadingFromICloud: Bool {
